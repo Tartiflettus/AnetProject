@@ -2,6 +2,7 @@
 #include <fstream>
 #include <cmath> //M_PI
 #include <string>
+#include <vector>
 
 constexpr float PRINT_SPEED = 1200;
 constexpr float LAYER_HEIGHT = 0.2;
@@ -212,10 +213,30 @@ void circle_layer(std::ostream& stream, printer& p, float radius, unsigned nb_se
 }
 
 
-void print_cylinder(std::ostream& stream, printer& p, float radius, unsigned nb_segs, float center_x, float center_y, unsigned nb_layers){
+void print_cylinder(std::ostream& stream, printer& p, float radius, unsigned nb_segs,
+                    float center_x, float center_y, unsigned nb_layers){
+    //find the number of inner circles
+    std::vector<unsigned> radiuss;
+    float current_radius = radius;
+    while(current_radius > p.get_radius()){
+        radiuss.push_back(current_radius);
+        current_radius -= p.get_radius()*2.;
+    }
+    //actually compute the circles
+    bool even = true;
     for(unsigned i=0; i < nb_layers; i++){
-        circle_layer(stream, p, radius, nb_segs, center_x, center_y);
+        if(even){ //outside to inside
+            for(int j=0; j < int(radiuss.size()); j++){
+                circle_layer(stream, p, radiuss[j], nb_segs, center_x, center_y);
+            }
+        }
+        else{ //inside to outside
+            for(int j=radiuss.size()-1; j >= 0; j--){
+                circle_layer(stream, p, radiuss[j], nb_segs, center_x, center_y);
+            }
+        }
         stream<< p.move(0, 0, p.get_layer_height(), false);
+        even = !even;
     }
 }
 
@@ -226,7 +247,7 @@ int main(){
 
     printer p(LAYER_HEIGHT, PRINT_SPEED, 3000., NOZZLE_WIDTH, FILAMENT_RADIUS);
     file<< p.go_to(80, 80, LAYER_HEIGHT, false);
-    print_cylinder(file, p, 20., 30, 80., 80., 500);
+    print_cylinder(file, p, 15., 40, 80., 80., 400);
     return 0;
 }
 
