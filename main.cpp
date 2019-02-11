@@ -44,7 +44,7 @@ public:
     }
 
     float get_radius() const{
-        return m_filament_radius;
+        return m_nozzle_width;
     }
 
     float get_layer_height() const{
@@ -53,6 +53,15 @@ public:
 
     float extrusion(double length) const{
         return m_layer_height * m_nozzle_width * length * 4. / (m_filament_radius*m_filament_radius*M_PI);
+    }
+
+    std::string header() const{
+        return "G28 ;Home\n"
+        "G1 Z15.0 F6000 ;Move the platform down 15mm\n"
+        ";Prime the extruder\n"
+        "G92 E0\n"
+        "G1 F200 E3\n"
+        "G92 E0\n";
     }
 
     std::string go_to(float x, float y, float z = -1., bool extr = false){
@@ -246,8 +255,9 @@ int main(){
     std::ofstream file("output.gcode");
 
     printer p(LAYER_HEIGHT, PRINT_SPEED, 3000., NOZZLE_WIDTH, FILAMENT_RADIUS);
+    file<< p.header();
     file<< p.go_to(80, 80, LAYER_HEIGHT, false);
-    print_cylinder(file, p, 15., 40, 80., 80., 400);
+    print_cylinder(file, p, 20., 40, 80., 80., 200);
     return 0;
 }
 
