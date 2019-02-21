@@ -56,12 +56,18 @@ public:
     }
 
     std::string header() const{
-        return "G28 ;Home\n"
-        "G1 Z15.0 F6000 ;Move the platform down 15mm\n"
-        ";Prime the extruder\n"
-        "G92 E0\n"
-        "G1 F200 E3\n"
-        "G92 E0\n";
+        return "G21\n"
+                "G90\n"
+                "G28\n"
+                "M140 S60\n"
+                "M105\n"
+                "M190 S60\n"
+                "M104 S200\n"
+                "M105\n"
+                "M109 S200\n"
+                "G92 E0\n"
+                "G1 E10 F1200\n"
+                "G92 E0\n";
     }
 
     std::string go_to(float x, float y, float z = -1., bool extr = false){
@@ -250,6 +256,58 @@ void print_cylinder(std::ostream& stream, printer& p, float radius, unsigned nb_
 }
 
 
+void circle_infill(std::ostream& stream, printer& p, float radius, float center_x, float center_y){
+    //go to the first place to begin the infill
+    p.go_to(center_x-radius, center_y);
+    bool up = true;
+    float current_x = p.get_x();
+    bool finished = false;
+    while(!finished){
+        //print the line on y axis direction
+        //find the intersection with the circle towards down
+        //we use Pythagore
+        //y = sqrt(r²-x²)
+        //x = |center_x - xp|
+        //yp = center_y +- y
+        {
+            const float x = std::abs(center_x - current_x);
+            const float y = std::sqrt(radius*radius - x*x);
+            const float yp = up ? center_y + y : center_y - y;
+            p.go_to(current_x, yp, -1, true);
+        }
+        //compute position on next line
+        {
+            current_x += p.get_radius();
+            const float x = std::abs(center_x - current_x);
+            const float y = std::sqrt(radius*radius - x*x);
+            const float yp = up ? center_y + y : center_y - y;
+            finished = yp > cente //TODO
+        }
+
+        up = !up;
+    }
+}
+
+
+void print_hemisphere(std::ostream& stream, printer& p, float radius, unsigned nb_segs,
+                      float center_x, float center_y){
+    float current_radius = std::sqrt(radius*radius - p.get_z()*p.get_z());
+    while(current_radius >= p.get_radius()*2.){
+        //compute this circle's radius
+        //we use Pythagore:
+        //if R is hemishpere radius, r is radius of this circle, z is layer height
+        //r = sqrt(R^2 - z^2)
+        circle_layer(stream, p, current_radius, nb_segs, center_x, center_y);
+        circle_layer(stream, p, current_radius-p.get_radius(), nb_segs, center_x, center_y);
+        p.move(0, 0, p.get_layer_height(), false);
+        current_radius = std::sqrt(radius*radius - p.get_z()*p.get_z());
+        std::cout<< current_radius<< std::endl;
+    }
+
+}
+
+
+
 
 int main(){
     std::ofstream file("output.gcode");
@@ -257,7 +315,7 @@ int main(){
     printer p(LAYER_HEIGHT, PRINT_SPEED, 3000., NOZZLE_WIDTH, FILAMENT_RADIUS);
     file<< p.header();
     file<< p.go_to(80, 80, LAYER_HEIGHT, false);
-    print_cylinder(file, p, 20., 40, 80., 80., 200);
+    print_hemisphere(file, p, 20., 30, 80., 80.);
     return 0;
 }
 
