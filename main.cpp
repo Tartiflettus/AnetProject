@@ -271,17 +271,20 @@ void circle_infill(std::ostream& stream, printer& p, float radius, float center_
         //yp = center_y +- y
         {
             const float x = std::abs(center_x - current_x);
-            const float y = std::sqrt(radius*radius - x*x);
+            const float y = std::sqrt(radius*radius - x*x <= 0. ? 0. : radius*radius - x*x);
             const float yp = up ? center_y + y : center_y - y;
-            p.go_to(current_x, yp, -1, true);
+            stream<< p.go_to(current_x, yp, -1, true);
         }
         //compute position on next line
         {
             current_x += p.get_radius();
-            const float x = std::abs(center_x - current_x);
-            const float y = std::sqrt(radius*radius - x*x);
-            const float yp = up ? center_y + y : center_y - y;
-            finished = yp > cente //TODO
+            finished = current_x >= center_x + radius;
+            if(!finished){
+                const float x = std::abs(center_x - current_x);
+                const float y = std::sqrt(radius*radius - x*x <= 0. ? 0. : radius*radius - x*x);
+                const float yp = up ? center_y + y : center_y - y;
+                stream<< p.go_to(current_x, yp, -1, true);
+            }
         }
 
         up = !up;
@@ -299,9 +302,10 @@ void print_hemisphere(std::ostream& stream, printer& p, float radius, unsigned n
         //r = sqrt(R^2 - z^2)
         circle_layer(stream, p, current_radius, nb_segs, center_x, center_y);
         circle_layer(stream, p, current_radius-p.get_radius(), nb_segs, center_x, center_y);
+        circle_infill(stream, p, current_radius - 2.*p.get_radius(), center_x, center_y);
         p.move(0, 0, p.get_layer_height(), false);
         current_radius = std::sqrt(radius*radius - p.get_z()*p.get_z());
-        std::cout<< current_radius<< std::endl;
+        //std::cout<< current_radius<< std::endl;
     }
 
 }
@@ -315,7 +319,9 @@ int main(){
     printer p(LAYER_HEIGHT, PRINT_SPEED, 3000., NOZZLE_WIDTH, FILAMENT_RADIUS);
     file<< p.header();
     file<< p.go_to(80, 80, LAYER_HEIGHT, false);
-    print_hemisphere(file, p, 20., 30, 80., 80.);
+    print_hemisphere(file, p, 5, 40, 80, 80);
+    //circle_infill(file, p, 5, 100, 100);
+    //std::cout<< std::sqrt(-1e-324)<< std::endl;
     return 0;
 }
 
