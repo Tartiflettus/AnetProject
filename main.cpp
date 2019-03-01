@@ -70,6 +70,10 @@ public:
                 "G92 E0\n";
     }
 
+    std::string end_print(){
+        return go_to(0, 0, get_z() + get_layer_height()*2., false);
+    }
+
     std::string go_to(float x, float y, float z = -1., bool extr = false){
         const std::string G = extr ? "G1" : "G0";
 
@@ -319,7 +323,9 @@ int main(){
     printer p(LAYER_HEIGHT, PRINT_SPEED, 3000., NOZZLE_WIDTH, FILAMENT_RADIUS);
     file<< p.header();
     file<< p.go_to(80, 80, LAYER_HEIGHT, false);
-    print_hemisphere(file, p, 5, 40, 80, 80);
+    circle_layer(file, p, 15, 10, 80, 80);
+    print_hemisphere(file, p, 10, 40, 80, 80);
+    file<< p.end_print();
     //circle_infill(file, p, 5, 100, 100);
     //std::cout<< std::sqrt(-1e-324)<< std::endl;
     return 0;
