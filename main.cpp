@@ -306,22 +306,23 @@ void print_cube_embossing(std::ostream& stream, printer& p, float size, float sp
     for(int i=0; i < int(nb_diags); i++){
         if(up){
             const float y = intersection_with_fixed_x(1, 1, current_c, 0);
-            if(y <= 1){
+            if(y <= size){
                 stream<< p.go_to(start_x, start_y + y, -1, true);
             }
             else{
-                const float x = intersection_with_fixed_y(1, 1, current_c, 1);
+                const float x = intersection_with_fixed_y(1, 1, current_c, size);
                 stream<< p.go_to(start_x + x, start_y + size, -1, true);
+
             }
         }
         else{
-            const float y = intersection_with_fixed_x(1, 1, current_c, 1);
-            if(y >= 0){
-                stream<< p.go_to(start_x + size, start_y + y, -1, true);
+            const float x = intersection_with_fixed_y(1, 1, current_c, 0);
+            if(x <= size){
+                stream<< p.go_to(start_x + x, start_y, -1, true);
             }
             else{
-                const float x = intersection_with_fixed_y(1, 1, current_c, 0);
-                stream<< p.go_to(start_x + x, start_y, -1, true);
+                const float y = intersection_with_fixed_x(1, 1, current_c, size);
+                stream<< p.go_to(start_x + size, start_y + y, -1, true);
             }
         }
         up = !up;
@@ -329,18 +330,19 @@ void print_cube_embossing(std::ostream& stream, printer& p, float size, float sp
     }
 
 
+    stream<< p.go_to(start_x, start_y + size);
     //diagonal up and right (starting at 0;size, ending at size;0)
     up = true;
     current_c = -1.;
     for(int i=0; i < int(nb_diags); i++){
         if(up){
-            const float y = intersection_with_fixed_x(-1, 1, current_c, 1);
-            if(y <= 1){
-                stream<< p.go_to(start_x + size, start_y + y, -1, true);
+            const float x = intersection_with_fixed_y(-1, 1, current_c, size);
+            if(x <= size){
+                stream<< p.go_to(start_x + x, start_y + size, -1, true);
             }
             else{
-                const float x = intersection_with_fixed_y(-1, 1, current_c, 1);
-                stream<< p.go_to(start_x + x, start_y + size, -1, true);
+                const float y = intersection_with_fixed_x(-1, 1, current_c, size);
+                stream<< p.go_to(start_x + size, start_y + y, -1, true);
             }
         }
         else{
@@ -377,8 +379,8 @@ int main(){
 
     printer p(LAYER_HEIGHT, PRINT_SPEED, TRAVEL_SPEED, NOZZLE_WIDTH, FILAMENT_RADIUS);
     file<< p.header();
-    file<< p.go_to(80, 80, LAYER_HEIGHT, false);
-    circle_layer(file, p, 40, 10, 80, 80);
+    file<< p.go_to(0, 0, LAYER_HEIGHT, false);
+    //circle_layer(file, p, 40, 10, 80, 80);
     print_cube_embossing(file, p, 40, 0.4, 0);
     //print_hemisphere(file, p, 10, 40, 80, 80);
     file<< p.end_print();
