@@ -5,6 +5,7 @@
 #include <vector>
 
 constexpr float PRINT_SPEED = 1200;
+constexpr float TRAVEL_SPEED = 3000;
 constexpr float LAYER_HEIGHT = 0.2;
 constexpr float NOZZLE_WIDTH = 0.4;
 constexpr float FILAMENT_RADIUS = 1.75;
@@ -320,7 +321,7 @@ void print_hemisphere(std::ostream& stream, printer& p, float radius, unsigned n
 int main(){
     std::ofstream file("output.gcode");
 
-    printer p(LAYER_HEIGHT, PRINT_SPEED, 3000., NOZZLE_WIDTH, FILAMENT_RADIUS);
+    printer p(LAYER_HEIGHT, PRINT_SPEED, TRAVEL_SPEED, NOZZLE_WIDTH, FILAMENT_RADIUS);
     file<< p.header();
     file<< p.go_to(80, 80, LAYER_HEIGHT, false);
     circle_layer(file, p, 15, 10, 80, 80);
