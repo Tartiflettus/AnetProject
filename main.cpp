@@ -11,6 +11,14 @@ constexpr float NOZZLE_WIDTH = 0.4;
 constexpr float FILAMENT_RADIUS = 1.75;
 
 
+float intersection_with_fixed_y(float a, float b, float c, float y){
+    return (-b*y - c) / a;
+}
+
+float intersection_with_fixed_x(float a, float b, float c, float x){
+    return (-a*x - c) / b;
+}
+
 
 class printer{
 private:
@@ -118,32 +126,6 @@ public:
 
 
 
-
-
-/*float square_layer(std::ostream& stream, float side, float cur_extr, float start_x, float start_y, float start_z){
-    const float extr = extrusion(side);
-
-    //first
-    cur_extr += extr;
-    stream<< "G1 X"<< start_x + side<< " Y"<< start_y<< " Z"<< start_z
-          << " E"<< cur_extr<< " F"<< PRINT_SPEED<< std::endl;
-    //second
-    cur_extr += extr;
-    stream<< "G1 X"<< start_x + side<< " Y"<< start_y + side<< " Z"<< start_z
-          << " E"<< cur_extr<< " F"<< PRINT_SPEED<< std::endl;
-    //third
-    cur_extr += extr;
-    stream<< "G1 X"<< start_x<< " Y"<< start_y + side<< " Z"<< start_z
-          << " E"<< cur_extr<< " F"<< PRINT_SPEED<< std::endl;
-    //fourth
-    cur_extr += extr;
-    stream<< "G1 X"<< start_x + side<< " Y"<< start_y<< " Z"<< start_z
-          << " E"<< cur_extr<< " F"<< PRINT_SPEED<< std::endl;
-
-    return cur_extr;
-}*/
-
-
 void square_layer(std::ostream& stream, printer& p, float side){
     stream<< p.move(side, 0, 0);
     stream<< p.move(0, side, 0);
@@ -151,19 +133,6 @@ void square_layer(std::ostream& stream, printer& p, float side){
     stream<< p.move(0, -side, 0);
 }
 
-
-//Y oriented zigzag
-/*void zigzag(std::ostream& stream, printer& p, float length, float angle, float width){
-    const float cos_angle = std::cos(angle);
-    const float sin_angle = std::sin(angle);
-    const float start_y = p.get_y();
-
-    bool even = true;
-    while(p.get_y() < start_y + length){
-        stream<< p.move(even ? cos_angle*width : -cos_angle*width, sin_angle*width, 0.);
-        even = !even;
-    }
-}*/
 
 
 //fill with a zigzag pattern
@@ -318,17 +287,101 @@ void print_hemisphere(std::ostream& stream, printer& p, float radius, unsigned n
 
 
 
+
+
+
+void print_cube_embossing(std::ostream& stream, printer& p, float size, float spacing, float offset){
+    const float start_x = p.get_x(), start_y = p.get_y();
+    //const float end_x = start_x + size, end_y = start_y + size;
+
+    //we use Pythagore to compute nb of diags
+    //size*size + size*size = diag*diag
+    //nb = floor(diag / spacingh)
+    const unsigned nb_diags = static_cast<unsigned>(std::sqrt(2.)*size / spacing);
+    const float delta_c = std::sqrt(1./2.)*spacing;
+    bool up = true;
+    float current_c = 0;
+
+    //diagonal down and right (starting at 0;0, ending at size;size)
+    for(int i=0; i < int(nb_diags); i++){
+        if(up){
+            const float y = intersection_with_fixed_x(1, 1, current_c, 0);
+            if(y <= 1){
+                stream<< p.go_to(start_x, start_y + y, -1, true);
+            }
+            else{
+                const float x = intersection_with_fixed_y(1, 1, current_c, 1);
+                stream<< p.go_to(start_x + x, start_y + size, -1, true);
+            }
+        }
+        else{
+            const float y = intersection_with_fixed_x(1, 1, current_c, 1);
+            if(y >= 0){
+                stream<< p.go_to(start_x + size, start_y + y, -1, true);
+            }
+            else{
+                const float x = intersection_with_fixed_y(1, 1, current_c, 0);
+                stream<< p.go_to(start_x + x, start_y, -1, true);
+            }
+        }
+        up = !up;
+        current_c -= delta_c;
+    }
+
+
+    //diagonal up and right (starting at 0;size, ending at size;0)
+    up = true;
+    current_c = -1.;
+    for(int i=0; i < int(nb_diags); i++){
+        if(up){
+            const float y = intersection_with_fixed_x(-1, 1, current_c, 1);
+            if(y <= 1){
+                stream<< p.go_to(start_x + size, start_y + y, -1, true);
+            }
+            else{
+                const float x = intersection_with_fixed_y(-1, 1, current_c, 1);
+                stream<< p.go_to(start_x + x, start_y + size, -1, true);
+            }
+        }
+        else{
+            const float y = intersection_with_fixed_x(-1, 1, current_c, 0);
+            if(y >= 0){
+                stream<< p.go_to(start_x, start_y + y, -1, true);
+            }
+            else{
+                const float x = intersection_with_fixed_y(-1, 1, current_c, 0);
+                stream<< p.go_to(start_x + x, start_y, -1, true);
+            }
+        }
+        up = !up;
+        current_c += delta_c;
+    }
+
+}
+
+
+void print_cube_with_embossing(std::ostream& stream, printer& p, float size, unsigned nb_layers){
+    for(int i=0; i < int(nb_layers); i++){
+        square_layer(stream, p, 20.);
+        stream<< p.move(p.get_radius(), p.get_radius(), 0, false);
+        //infill
+        print_cube_embossing(stream, p, size - 2.*p.get_radius(), 0.8, 0);
+    }
+}
+
+
+
+
 int main(){
     std::ofstream file("output.gcode");
 
     printer p(LAYER_HEIGHT, PRINT_SPEED, TRAVEL_SPEED, NOZZLE_WIDTH, FILAMENT_RADIUS);
     file<< p.header();
     file<< p.go_to(80, 80, LAYER_HEIGHT, false);
-    circle_layer(file, p, 15, 10, 80, 80);
-    print_hemisphere(file, p, 10, 40, 80, 80);
+    circle_layer(file, p, 40, 10, 80, 80);
+    print_cube_embossing(file, p, 40, 0.4, 0);
+    //print_hemisphere(file, p, 10, 40, 80, 80);
     file<< p.end_print();
-    //circle_infill(file, p, 5, 100, 100);
-    //std::cout<< std::sqrt(-1e-324)<< std::endl;
     return 0;
 }
 
