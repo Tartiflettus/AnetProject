@@ -71,7 +71,7 @@ public:
     }
 
     std::string end_print(){
-        return go_to(0, 0, get_z() + get_layer_height()*2., false);
+        return go_to(0, 0, std::min(240., get_z() + 10.), false);
     }
 
     std::string go_to(float x, float y, float z = -1., bool extr = false){
