@@ -60,6 +60,10 @@ public:
         return m_layer_height;
     }
 
+    void set_layer_height(float height){
+        m_layer_height = height;
+    }
+
     float extrusion(double length) const{
         return m_layer_height * m_nozzle_width * length * 4. / (m_filament_radius*m_filament_radius*M_PI);
     }
@@ -68,19 +72,27 @@ public:
         return "G21\n"
                 "G90\n"
                 "G28\n"
+                "M104 S210\n"
+                "M190 S60\n"
+                "M109 S210\n"
                 "M140 S60\n"
                 "M105\n"
-                "M190 S60\n"
-                "M104 S200\n"
-                "M105\n"
-                "M109 S200\n"
-                "G92 E0\n"
-                "G1 E10 F1200\n"
+                "M106 S100\n"
+                //"G92 E0\n"
+                //"G1 E20 F1200\n"
                 "G92 E0\n";
     }
 
     std::string end_print(){
-        return go_to(0, 0, std::min(240., get_z() + 10.), false);
+        const std::string end = "G92 E0\n"
+                "M104 S0\n"
+                "M140 S0;Retract the filament\n"
+                "G92 E1\n"
+                "G1 E-1 F300\n"
+                "M106 S0\n"
+                "G28 X0 Y0\n"
+                "M84\n";
+        return end;
     }
 
     std::string go_to(float x, float y, float z = -1., bool extr = false){
@@ -202,6 +214,34 @@ void circle_layer(std::ostream& stream, printer& p, float radius, unsigned nb_se
 }
 
 
+void circle_layer_smart(std::ostream& stream, printer& p, float radius, unsigned nb_segs,
+                        float center_x, float center_y, int index){
+    const float angle = M_PI * 2. / float(nb_segs);
+
+    //go to first point, without printing
+    stream<< p.go_to(center_x + std::cos(index*angle) * radius, center_y + std::sin(index*angle) * radius);
+    for(unsigned i=index+1; i < nb_segs + index; i++){
+        //print to the next point
+        stream<< p.go_to(center_x + std::cos((i%nb_segs)*angle) * radius,
+                         center_y + std::sin((i%nb_segs)*angle) * radius,
+                         -1., true);
+    }
+    //print the last segment
+    //do not print exactly to the starting point
+    //rather print with the nozzle radius to spare
+    float new_x = center_x + std::cos(index*angle) * radius;
+    float new_y = center_y + std::sin(index*angle) * radius;
+    //compute translate vector
+    new_x = (new_x - p.get_x());
+    new_y = (new_y - p.get_y());
+    //longueur du vecteur
+    const float l = std::sqrt(new_x*new_x + new_y*new_y);
+    new_x = new_x * l / (l - p.get_radius());
+    new_y = new_y * l / (l - p.get_radius());
+    stream<< p.go_to(p.get_x() + new_x, p.get_y() + new_y, -1, true);
+}
+
+
 void print_cylinder(std::ostream& stream, printer& p, float radius, unsigned nb_segs,
                     float center_x, float center_y, unsigned nb_layers){
     //find the number of inner circles
@@ -209,7 +249,7 @@ void print_cylinder(std::ostream& stream, printer& p, float radius, unsigned nb_
     float current_radius = radius;
     while(current_radius > p.get_radius()){
         radiuss.push_back(current_radius);
-        current_radius -= p.get_radius()*2.;
+        current_radius -= p.get_radius();
     }
     //actually compute the circles
     bool even = true;
@@ -226,6 +266,15 @@ void print_cylinder(std::ostream& stream, printer& p, float radius, unsigned nb_
         }
         stream<< p.move(0, 0, p.get_layer_height(), false);
         even = !even;
+    }
+}
+
+void print_cylinder_smart(std::ostream& stream, printer& p, float radius, unsigned nb_segs,
+                    float center_x, float center_y, unsigned nb_layers){
+    for(int i=0; i < nb_layers; i++){
+        circle_layer_smart(stream, p, radius, nb_segs, center_x, center_y, i % nb_segs);
+        circle_layer_smart(stream, p, radius - p.get_radius(), nb_segs, center_x, center_y, i % nb_segs);
+        stream<< p.move(0, 0, p.get_layer_height(), false);
     }
 }
 
@@ -268,6 +317,7 @@ void circle_infill(std::ostream& stream, printer& p, float radius, float center_
 
 void print_hemisphere(std::ostream& stream, printer& p, float radius, unsigned nb_segs,
                       float center_x, float center_y){
+    stream<< p.go_to(center_x, center_y, p.get_layer_height(), false);
     float current_radius = std::sqrt(radius*radius - p.get_z()*p.get_z());
     while(current_radius >= p.get_radius()*2.){
         //compute this circle's radius
@@ -277,7 +327,7 @@ void print_hemisphere(std::ostream& stream, printer& p, float radius, unsigned n
         circle_layer(stream, p, current_radius, nb_segs, center_x, center_y);
         circle_layer(stream, p, current_radius-p.get_radius(), nb_segs, center_x, center_y);
         circle_infill(stream, p, current_radius - 2.*p.get_radius(), center_x, center_y);
-        p.move(0, 0, p.get_layer_height(), false);
+        stream<< p.move(0, 0, p.get_layer_height(), false);
         current_radius = std::sqrt(radius*radius - p.get_z()*p.get_z());
         //std::cout<< current_radius<< std::endl;
     }
@@ -285,6 +335,35 @@ void print_hemisphere(std::ostream& stream, printer& p, float radius, unsigned n
 }
 
 
+
+
+float normalize(float val, float min, float max){
+    return (val - min) / (max - min);
+}
+
+
+void print_hemisphere_adaptative(std::ostream& stream, printer& p, float radius, unsigned nb_segs,
+                                 float center_x, float center_y){
+    p.set_layer_height(0.3);
+    stream<< p.go_to(center_x, center_y, p.get_layer_height(), false);
+    float current_radius = std::sqrt(radius*radius - p.get_z()*p.get_z());
+    while(current_radius >= p.get_radius()*2.){
+        //compute this circle's radius
+        //we use Pythagore:
+        //if R is hemishpere radius, r is radius of this circle, z is layer height
+        //r = sqrt(R^2 - z^2)
+        circle_layer(stream, p, current_radius, nb_segs, center_x, center_y);
+        circle_layer(stream, p, current_radius-p.get_radius(), nb_segs, center_x, center_y);
+        circle_infill(stream, p, current_radius - 2.*p.get_radius(), center_x, center_y);
+        //compute next layer height
+        stream<< p.move(0, 0, p.get_layer_height(), false);
+        const float height = (1. - normalize(p.get_z(), 0., radius)) / 5. + 0.1;
+        std::cout<< height<< std::endl;
+        p.set_layer_height(height);
+        current_radius = std::sqrt(radius*radius - p.get_z()*p.get_z());
+        //std::cout<< current_radius<< std::endl;
+    }
+}
 
 
 
@@ -380,9 +459,11 @@ int main(){
     printer p(LAYER_HEIGHT, PRINT_SPEED, TRAVEL_SPEED, NOZZLE_WIDTH, FILAMENT_RADIUS);
     file<< p.header();
     file<< p.go_to(0, 0, LAYER_HEIGHT, false);
-    //circle_layer(file, p, 40, 10, 80, 80);
-    print_cube_embossing(file, p, 40, 0.4, 0);
-    //print_hemisphere(file, p, 10, 40, 80, 80);
+    circle_layer(file, p, 40, 20, 100, 100);
+    //print_cube_embossing(file, p, 40, 0.4, 0);
+    //print_hemisphere_adaptative(file, p, 7.5, 50, 100, 100);
+    //print_cylinder_smart(file, p, 7.5, 50, 100, 100, 50);
+    print_cylinder_smart(file, p, 7.5, 20, 100, 100, 50);
     file<< p.end_print();
     return 0;
 }
